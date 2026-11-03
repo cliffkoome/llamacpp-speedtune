@@ -6,9 +6,8 @@ Copy one into your coding agent (Claude Code, OpenCode, Codex, …) with this sk
 ```text
 Install the agent skill from https://github.com/cliffkoome/llamacpp-speedtune (clone it into your skills folder, or into
 ~/llamacpp-speedtune and read its SKILL.md if you don't support skills). Then use it to tune my local models.
-Start with the hardware inventory, then tell me what you found, the quick and comprehensive options,
-and how long each would take on my machine. After I pick one, run it autonomously to the end.
-Only stop to ask before using sudo, building software, or changing my live server or agent config.
+Check my hardware first, then ask me all your questions in one go and tell me when it will be done.
+After that, run it unattended to the end. Don't change my live server or agent config until I'm back and say yes.
 ```
 
 ## 2-minute check (no benchmarks, changes nothing)
