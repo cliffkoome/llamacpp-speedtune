@@ -9,9 +9,12 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
 import urllib.request
 from pathlib import Path
+
+import hw
 
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = Path(os.environ.get("TUNE_CONFIG", "config.json")).expanduser()
@@ -19,7 +22,12 @@ CONFIG_PATH = Path(os.environ.get("TUNE_CONFIG", "config.json")).expanduser()
 
 def load_config():
     if not CONFIG_PATH.exists():
-        raise SystemExit(f"no config at {CONFIG_PATH}: copy config.example.json and edit it, or set TUNE_CONFIG")
+        # Show usage instead of a config error when the user only wants to know how to call a script.
+        if len(sys.argv) < 2 or sys.argv[1] in ("-h", "--help"):
+            raise SystemExit((getattr(sys.modules.get("__main__"), "__doc__", None) or "").strip()
+                             + f"\n\n(No config yet at {CONFIG_PATH}: run ./init_config.py to create one.)")
+        raise SystemExit(f"no config at {CONFIG_PATH}: run ./init_config.py (or copy config.example.json "
+                         "and edit it), or point TUNE_CONFIG at an existing one")
     cfg = json.loads(CONFIG_PATH.read_text())
     cfg.setdefault("port", 8090)
     cfg.setdefault("results_dir", "results")
@@ -65,32 +73,45 @@ def request(path, body=None, timeout=1800, url=URL):
     return json.loads(data) if data[:1] in (b"{", b"[") else data.decode()
 
 
-def free_router():
-    """Ask the user's llama-server router (if configured) to unload models so VRAM is free."""
-    url = CFG.get("router_url")
+SELF_UNLOAD_HELP = """\
+The agent running this skill uses model {model!r}, which is served by the router being tuned
+({url}). Unloading the router's models would stop the agent itself, and the GPU can't run the
+agent's model and a benchmark at the same time. Options:
+  - run the tuning from an agent on a cloud model (Claude Code, Codex, or OpenCode with a cloud provider);
+  - or run the scripts yourself in a terminal (see README, "Running scripts yourself");
+  - if the agent's model is NOT on this machine's GPU after all, set agent.self_model to null in the config."""
+
+
+def free_router(cfg=None):
+    """Ask the user's llama-server router (if configured) to unload models so VRAM is free.
+
+    Refuses when the agent running the skill is served by that router (config agent.self_model):
+    unloading would kill the agent mid-run.
+    """
+    cfg = CFG if cfg is None else cfg
+    url = cfg.get("router_url")
     if not url:
-        return
+        return []
     try:
         models = request("/v1/models", url=url, timeout=5)["data"]
     except OSError:
-        return
+        return []
+    me = (cfg.get("agent") or {}).get("self_model")
+    if me and any(me in (m["id"], *m.get("aliases", [])) for m in models):
+        raise SystemExit(SELF_UNLOAD_HELP.format(model=me, url=url))
     loaded = [m["id"] for m in models if m.get("status", {}).get("value") not in (None, "unloaded")]
+    if loaded:
+        print(f"unloading from the live router {url}: {', '.join(loaded)}", flush=True)
     for mid in loaded:
         request("/models/unload", {"model": mid}, url=url, timeout=60)
     if loaded:
         time.sleep(3)
+    return loaded
 
 
 def vram_mib():
-    """Used VRAM in MiB (AMD sysfs or nvidia-smi), or -1 if unknown."""
-    for f in Path("/sys/class/drm").glob("card*/device/mem_info_vram_used"):
-        return int(f.read_text()) // 2**20
-    try:
-        out = subprocess.run(["nvidia-smi", "--query-gpu=memory.used", "--format=csv,noheader,nounits"],
-                             capture_output=True, text=True, timeout=5).stdout
-        return int(out.split()[0])
-    except (OSError, ValueError, IndexError, subprocess.TimeoutExpired):
-        return -1
+    """Used VRAM in MiB on the main GPU (the one with the most VRAM), or -1 if unknown."""
+    return hw.vram_used_mib()
 
 
 class Server:

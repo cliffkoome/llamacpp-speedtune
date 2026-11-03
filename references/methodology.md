@@ -50,7 +50,7 @@ Cheap and many first, expensive and few last:
 
 ## Hygiene
 - One test server at a time. VRAM holds one model, and a second server on the same port silently answers for the first. `server.py` refuses to start if the port is taken.
-- Unload the user's live server first (`router_url` in the config), and check that VRAM is near zero.
+- Unload the user's live server first (`router_url` in the config), and check that VRAM is near zero. Never when the agent doing the tuning runs on that server (`agent.self_model`, see SKILL.md Safety rules).
 - Keep the CPU otherwise idle during runs. A compile in the background skews MoE results.
 - **Drift check:** end every sweep by rerunning its first config. More than ~5% difference means heat, power limits or background load changed the results; fix that and re-measure.
 - Other GPU users (browser, games, a compositor on a second monitor) take VRAM. Note `detect_hw.sh`'s VRAM "used" figure before starting, and keep it the same for the final check.
