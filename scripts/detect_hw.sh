@@ -10,6 +10,11 @@ uname -srm
 # shellcheck source=/dev/null
 [[ -f /etc/os-release ]] && . /etc/os-release && echo "${PRETTY_NAME:-}"
 
+if grep -qi microsoft /proc/version 2>/dev/null; then
+  echo "WSL2 detected (Windows). NVIDIA GPUs work through the Windows driver (nvidia-smi should list the card);"
+  echo "AMD ROCm support in WSL2 is limited to some cards, and Vulkan may fall back to a software device: check --list-devices."
+fi
+
 section "CPU"
 if command -v lscpu >/dev/null; then
   lscpu | grep -E 'Model name|^CPU\(s\)|Thread\(s\) per core|Core\(s\) per socket|L3'
@@ -105,3 +110,22 @@ if command -v ollama >/dev/null; then
 else
   echo "not installed"
 fi
+
+section "Other engines (challengers, see references/engines.md)"
+# Only what's already installed: quick mode uses these without downloading anything.
+pyhas() { python3 -c "import $1" 2>/dev/null && echo "$2: python package '$1' importable ($(python3 -c "import $1; print(getattr($1, '__version__', '?'))" 2>/dev/null))"; }
+command -v lms >/dev/null && echo "LM Studio: lms CLI found (llama.cpp and, on Macs, MLX inside)"
+[[ -d ~/.lmstudio ]] && echo "LM Studio: ~/.lmstudio exists"
+command -v llama-swap >/dev/null && echo "llama-swap: $(command -v llama-swap)"
+command -v koboldcpp >/dev/null && echo "KoboldCpp: $(command -v koboldcpp) (a llama.cpp wrapper)"
+command -v vllm >/dev/null && echo "vLLM: $(command -v vllm)"
+command -v ovms >/dev/null && echo "OpenVINO Model Server: $(command -v ovms)"
+pyhas mlx_lm "MLX (mlx-lm)"
+pyhas exllamav2 "ExLlamaV2"
+pyhas exllamav3 "ExLlamaV3"
+pyhas vllm "vLLM"
+pyhas sglang "SGLang"
+pyhas openvino "OpenVINO"
+while IFS= read -r d; do echo "TabbyAPI (ExLlama server): $d"; done < <(find ~ -maxdepth 4 -type d -iname 'tabbyAPI' 2>/dev/null)
+while IFS= read -r b; do echo "ik_llama.cpp build: $b"; done < <(find ~ -maxdepth 6 -path '*ik_llama*' -type f -name llama-server -perm -u+x 2>/dev/null)
+echo "(Engines installed in their own virtual environments aren't seen here; ask the user.)"
