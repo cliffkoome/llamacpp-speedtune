@@ -17,6 +17,7 @@ git clone https://github.com/cliffkoome/llamacpp-speedtune && cd llamacpp-speedt
 ./quick_check.py --router http://127.0.0.1:8080          # a llama-server router (key from $LLAMA_API_KEY)
 ./quick_check.py --preset ~/models/presets.ini           # or a presets file
 ./quick_check.py --args "-m model.gguf -c 32768 -ngl 99"  # or one command line
+./quick_check.py --ollama                                # or your Ollama models and settings
 ```
 
 ```text
@@ -48,7 +49,9 @@ Only stop to ask before using sudo, building software, or changing my live serve
 |---|---|---|---|
 | For | Seeing if tuning is worth it | A big, safe win in about an hour | The best config your hardware can do, with evidence |
 | Does | Reads your current flags and hardware; rule-of-thumb findings; changes nothing | Uses your existing llama.cpp build; sweeps batch size and cache type at your agent's max context; finds the MoE offload that fits; confirms in a real server; 2 short agent tasks per model to catch models that can't use tools | Everything: builds and compares every backend, all sweeps at 3–4 depths, speculative decoding, recorded-session replay, all 6 agent tasks before vs after |
-| Time | **~2 min**, GPU stays free | **20–40 min per model** (45–90 min for 2–3 models) | **1.5–3 h per model** (5–10 h for 3–4 models: run it overnight) |
+| Time | **~2 min**, GPU stays free | **25–45 min per model** (50–100 min for 2–3 models) | **1.5–3 h per model** (5–10 h for 3–4 models: run it overnight) |
+
+**You always get a before/after.** Before changing anything, the agent saves your current settings, backs up the files it might touch, and measures your current config the same way it measures the new one. The report opens with the before/after table, and says how to undo every change.
 
 **Before a tune runs, the agent tells you the estimate for your machine and waits for your OK.** Your GPU (and any model server you run) is busy for the whole run. A quick tune can be upgraded to comprehensive later without redoing its work.
 
@@ -61,7 +64,7 @@ Only stop to ask before using sudo, building software, or changing my live serve
 5. **Real-server check:** the winners at full context, to confirm they fit.
 6. **Speculative decoding:** MTP/assistant drafts and n-gram speculation, kept only if they help on real tasks.
 7. **End-to-end:** 6 coding tasks run headless through your agent (fix a failing test, add a feature with tests, multi-file rename, stack-trace fix, read-then-edit, a long audit that pushes toward compaction), baseline vs tuned.
-8. **Apply and document:** router presets (one server, many models, each on its best backend), or Ollama settings, plus a results report. It asks before touching services or using sudo.
+8. **Apply and document:** router presets (one server, many models, each on its best backend), or Ollama settings, plus a results report that opens with before vs after for each model. It asks before touching services or using sudo.
 
 ## Example result (RX 6600 XT 8 GB, Ryzen 7 5700X, 32 GB)
 
@@ -122,7 +125,7 @@ The full workflow has been run end to end on **Linux with an AMD GPU** (RX 6600 
 | `references/backends.md` | Build recipes (CUDA, HIP, Vulkan, Metal, combined), AMD override table, Ollama |
 | `references/gotchas.md` | Pitfalls that silently corrupt results |
 | `references/example-rx6600xt.md` | A complete worked example |
-| `scripts/` | `quick_check.py`, `init_config.py`, `detect_hw.sh`, `micro.py`, `table.py`, `validate_fill.py`, `bench_agentic.py`, `bench_replay.py`, `bench_general.py`, `to_ollama.py`, plus helpers (`server.py`, `hw.py`, `gguf_meta.py`) |
+| `scripts/` | `quick_check.py`, `init_config.py`, `before_after.py`, `detect_hw.sh`, `micro.py`, `table.py`, `validate_fill.py`, `bench_agentic.py`, `bench_replay.py`, `bench_general.py`, `to_ollama.py`, plus helpers (`server.py`, `hw.py`, `gguf_meta.py`) |
 | `agentic/` | The test project, its 6 tasks and hidden checks |
 | `community/` | Shared results from other machines |
 | `tests/` | Unit tests for the scripts (`pytest tests`) |
@@ -137,8 +140,12 @@ export TUNE_CONFIG=$PWD/../config.json      # review it first: ctx, router_url, 
 ./micro.py vulkan C1-mymodel mymodel -ngl 99 -fa 1 -p 4096 -n 128 -d 0,16384,32768 -r 1
 ./table.py C1-
 ./validate_fill.py mymodel vulkan try1 12000,25000,49000 -ngl 99 -c 65536 -fa on -ub 2048
-RECORD=1 ./bench_agentic.py mymodel vulkan tuned 1 -ngl 99 -c 65536 -fa on -ub 2048
+./validate_fill.py mymodel vulkan before 12000,25000,49000 <your current flags>   # baseline first
+./validate_fill.py mymodel vulkan after 12000,25000,49000 -ngl 99 -c 65536 -fa on -ub 2048
+RECORD=1 ./bench_agentic.py mymodel vulkan after 1 -ngl 99 -c 65536 -fa on -ub 2048
+./before_after.py mymodel                  # Markdown before/after table from the measurements
 ```
+`./quick_check.py --preset presets.ini --json` prints each model's current flags (`server_args`) for the baseline run.
 Every script prints its usage when run without arguments.
 
 ## Adding another agent
