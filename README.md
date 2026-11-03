@@ -2,7 +2,7 @@
 
 **Make your local LLMs as fast as your hardware allows, for your coding agent.** An agent skill that has your coding agent (Claude Code, OpenCode, Codex, …) pick the best **engine**, then the best **backend**, then the best **flags** for *your* hardware, measured at the context depths agents really use and checked on real agent tasks. It asks its questions up front, tells you when it'll be done, and runs while you're away.
 
-<p align="center"><img src="docs/result.svg" alt="Qwen3.6-35B-A3B on an 8 GB RX 6600 XT at 49K tokens: prompt reading 172 → 526 t/s (3.1× faster), generation 19.2 → 25.3 t/s (+32%), agent tasks 5/6 → 6/6" width="720"></p>
+<p align="center"><img src="docs/social-preview.png" alt="Qwen3.6-35B-A3B on an 8 GB RX 6600 XT at 49K tokens: prompt reading 172 → 526 t/s (3.1× faster), generation 19.2 → 25.3 t/s (+32%), agent tasks 5/6 → 6/6" width="720"></p>
 
 Most tuning advice is measured on an empty context with one short prompt. Coding agents don't work like that: every turn resends 12K+ tokens of system prompt and tools plus the whole conversation, and they compact near the end of the context. A config that wins at depth 0 can lose badly at 48K. This skill measures at your agent's real context depths, confirms that configs fit in a real server, and checks the result on real agent tasks.
 
