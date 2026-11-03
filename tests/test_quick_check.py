@@ -1,0 +1,56 @@
+import quick_check as qc
+
+HW = {"gpu": {"name": "test", "total_mib": 8192}, "physical_cores": 8, "ram_mib": 32768}
+DENSE_7B = {"arch": "qwen2", "block_count": 28, "expert_count": 0, "expert_used": 0, "context_length": 32768,
+            "size_mib": 4400, "moe": False}
+MOE_35B = {"arch": "qwen35moe", "block_count": 40, "expert_count": 256, "expert_used": 8, "context_length": 262144,
+           "size_mib": 21000, "moe": True}
+
+
+def titles(findings):
+    return " | ".join(f["title"] for f in findings)
+
+
+def test_parse_cmdline_spellings():
+    c = qc.parse_cmdline("llama-server -m /m.gguf -ngl 99 --flash-attn on --jinja -ub 2048 --n-cpu-moe 34 -c 65536")
+    assert c == {"model": "/m.gguf", "ngl": "99", "flash_attn": "on", "jinja": "true", "ubatch": "2048",
+                 "n_cpu_moe": "34", "ctx": "65536"}
+
+
+def test_parse_cmdline_negative_value():
+    assert qc.parse_cmdline("-ngl -1 -t 8")["ngl"] == "-1"
+
+
+def test_parse_preset_merges_defaults(tmp_path):
+    p = tmp_path / "presets.ini"
+    p.write_text("version = 1\n[*]\nfa = on\nthreads = 8\n\n[a]\nmodel = /a.gguf ; comment\nthreads = 6\n[b]\nmodel = /b.gguf\n")
+    out = qc.parse_preset(p)
+    assert out["a"] == {"flash_attn": "on", "threads": "6", "model": "/a.gguf"}
+    assert out["b"]["threads"] == "8"
+
+
+def test_untuned_dense_model():
+    cfg = qc.parse_cmdline("-m x -ngl 20 -t 16 -fa off -np 4 -c 32768 -ctk q4_0")
+    t = titles(qc.check(cfg, DENSE_7B, HW))
+    for expected in ("Flash attention is off", "Only 20 of 28 layers", "16 threads", "KV cache q4_0", "4 parallel slots"):
+        assert expected in t
+
+
+def test_tuned_moe_model_is_clean():
+    cfg = qc.parse_cmdline("-m x -ngl 99 --n-cpu-moe 34 -ub 2048 -b 2048 -fa on -t 8 -c 65536 -ctk f16 -ctv f16")
+    assert qc.check(cfg, MOE_35B, HW) == []
+
+
+def test_moe_small_batch_and_no_offload():
+    assert "Small batch size with experts in RAM" in titles(qc.check({"n_cpu_moe": "33"}, MOE_35B, HW))
+    assert "without expert offload" in titles(qc.check({"ngl": "20"}, MOE_35B, HW))
+
+
+def test_ngl_left_to_fit():
+    assert "left to --fit" in titles(qc.check({}, DENSE_7B, HW))
+
+
+def test_backends_machine_wide():
+    assert qc.check_backends(["ROCm0", "Vulkan0"], ["", ""])
+    assert not qc.check_backends(["ROCm0", "Vulkan0"], ["ROCm0", "Vulkan0"])
+    assert not qc.check_backends(["Vulkan0"], [""])
