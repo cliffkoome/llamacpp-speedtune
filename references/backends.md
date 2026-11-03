@@ -43,4 +43,14 @@ ROCm officially supports only some chips. Consumer cards usually run by pretendi
 So decide per model, and serve mixed backends from one combined build. See `example-rx6600xt.md`.
 
 ## Ollama
-Ollama bundles its own llama.cpp-based runners (CUDA/ROCm/Vulkan), and it uses ROCm on AMD when available. It's fine for projects built around its API, but its flags (batch sizes, `--n-cpu-moe`, per-model device) are limited. For tuning, export its GGUF blobs and run `llama-server` directly. Compare Ollama with `curl localhost:11434/api/generate -d '{"model":"...","prompt":"...","stream":false}'` and compute `eval_count / eval_duration`.
+Ollama bundles its own llama.cpp-based runners (CUDA/ROCm/Vulkan), and it uses ROCm on AMD when available. It's fine for projects built around its API, but its settings are limited: one batch size, whole-layer GPU offload only (no `--n-cpu-moe`), no per-model backend, and the KV cache type and flash attention are set for the whole service.
+
+So tune with `llama-server` (Ollama's blobs are plain GGUF files, see gotchas.md), then carry the winner over:
+
+```bash
+scripts/to_ollama.py --preset presets.ini --model <name>     # or --args "<llama-server flags>"
+```
+
+It prints a Modelfile (`num_ctx`, `num_gpu`, `num_thread`, `num_batch`), the service environment (`OLLAMA_FLASH_ATTENTION`, `OLLAMA_KV_CACHE_TYPE`, `OLLAMA_NUM_PARALLEL`) and what didn't carry over. For MoE models with CPU experts, `num_gpu` is only an approximation of `--n-cpu-moe`: try a few values.
+
+Measure Ollama with `curl localhost:11434/api/generate -d '{"model":"...","prompt":"...","stream":false}'` and compute `eval_count / eval_duration * 1e9` (generation t/s) and `prompt_eval_count / prompt_eval_duration * 1e9` (prompt t/s). Use a long prompt near your agent's real depth, not a one-liner.
