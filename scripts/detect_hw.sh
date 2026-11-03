@@ -7,6 +7,7 @@ section() { printf '\n== %s\n' "$1"; }
 
 section "OS"
 uname -srm
+# shellcheck source=/dev/null
 [[ -f /etc/os-release ]] && . /etc/os-release && echo "${PRETTY_NAME:-}"
 
 section "CPU"
@@ -65,7 +66,7 @@ for card in /sys/class/drm/card[0-9]; do
     fi
     d=$(dirname "$d")
   done
-  [[ -n $narrow ]] && IFS='|' read -r w sp mw <<<"$narrow" && echo "$(basename "$card") PCIe link: x$w @ $sp (narrowest in chain). If the GPU sits in a chipset slot or a riser, this can be far below the card's own spec."
+  [[ -n $narrow ]] && IFS='|' read -r w sp mw <<<"$narrow" && echo "$(basename "$card") PCIe link: x$w @ $sp (narrowest in chain; that link supports up to x$mw). If the GPU sits in a chipset slot or a riser, this can be far below the card's own spec."
   pl=$card/device/power_dpm_force_performance_level
   [[ -f $pl ]] && echo "$(basename "$card") power level: $(cat "$pl") (auto is fine; 'low' or a laptop power-saver profile skews results)"
 done
@@ -83,7 +84,11 @@ done
 
 section "GGUF models (size vs memory)"
 vram_mib=0
-for f in /sys/class/drm/card*/device/mem_info_vram_total; do [[ -f $f ]] && vram_mib=$(( $(cat "$f") / 1048576 )); done
+# Use the card with the most VRAM: an integrated GPU's small carve-out must not hide the real card.
+for f in /sys/class/drm/card*/device/mem_info_vram_total; do
+  [[ -f $f ]] || continue
+  v=$(( $(cat "$f") / 1048576 )); (( v > vram_mib )) && vram_mib=$v
+done
 command -v nvidia-smi >/dev/null && vram_mib=$(nvidia-smi --query-gpu=memory.total --format=csv,noheader,nounits | head -1)
 avail_mib=$(awk '/MemAvailable/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
 echo "VRAM ${vram_mib} MiB, RAM available ${avail_mib:-?} MiB. Models bigger than VRAM + ~80% of available RAM will swap or fail; flagged below."
