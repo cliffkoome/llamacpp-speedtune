@@ -1,9 +1,9 @@
 ---
-name: tune-my-llm
-description: Benchmark and tune local LLMs served with llama.cpp (llama-server) for the machine they run on, with coding agents like OpenCode as the main workload. Finds the best backend per model (CUDA, HIP/ROCm, Vulkan, Metal), batch sizes, KV cache type, MoE expert offload, threads and speculative decoding, measured at the context depths a coding agent really reaches, confirmed in a real server and on real agent tasks, then applied and documented. Use when the user wants to speed up, benchmark, tune or optimise local models, compare backends, pick llama-server flags, or set up a multi-model llama-server router.
+name: llamacpp-speedtune
+description: Make llama.cpp faster for the user's coding agent. Benchmark and tune local LLMs served with llama.cpp (llama-server) for the machine they run on, with coding agents like OpenCode as the main workload. Finds the best backend per model (CUDA, HIP/ROCm, Vulkan, Metal), batch sizes, KV cache type, MoE expert offload, threads and speculative decoding, measured at the context depths a coding agent really reaches, confirmed in a real server and on real agent tasks, then applied and documented. Also has a 2-minute no-benchmark check of current settings, and converts a tuned config to Ollama settings. Use when the user wants to speed up, benchmark, tune or optimise local models, check whether their llama-server or Ollama settings are any good, compare backends, pick llama-server flags, or set up a multi-model llama-server router.
 ---
 
-# Tune my LLM
+# llamacpp-speedtune
 
 You're tuning the user's local models on their own hardware. The goal is the fastest **working** config for each model under the user's real workload, usually a coding agent. Every claim must come from a measurement on this machine. Today's defaults and other people's numbers are starting points only.
 
@@ -15,9 +15,16 @@ Read before starting:
 ## Safety rules
 - **Ask before** using sudo, changing a running service, editing the user's agent or server config, installing packages or building large projects. Prepare the change, show it, and apply it once approved.
 - **Never kill processes by pattern** (`pkill -f`, `killall`): the pattern can match your own shell. Kill by PID.
+- **Never unload the model you're running on.** Before any benchmark, find out which model *you* (the agent running this skill) use. If it's served by the user's local server or GPU, a tune would unload it and stop you mid-run, and the GPU can't serve you and a benchmark at once. Stop and tell the user: run the tune from an agent on a cloud model, or run the scripts themselves (README, "Running scripts yourself"). The 2-minute check is fine either way: it changes nothing. Record your model as `agent.self_model` in the config; `free_router()` refuses to unload it.
 - **One test server at a time**, on a spare port (config `port`, default 8090). The user's live server stays untouched, except that you unload its models (`router_url`) so the GPU is free. Tell the user the GPU will be busy.
 - **Don't trust a run you haven't checked.** After the first agentic task, inspect the run folder: did the agent edit the right files? Did the check really fail or pass? See gotchas.
 - Keep the user posted: one line per finished experiment with the key numbers.
+
+## Start with the 2-minute check
+Unless the user asked straight away for a tune, start here. It needs no config, runs no benchmarks and changes nothing, so the GPU and the user's server stay free:
+- `scripts/quick_check.py --router <url>` for a llama-server router (API key from `$LLAMA_API_KEY`, or `--key-env`), `--preset <presets.ini>`, or `--args "<llama-server command line>"`. Add `--json` to parse it.
+- For Ollama users, read `ollama ps` / the Modelfile and environment and apply the same rules by hand (flash attention, KV cache type, context size, `num_gpu`).
+- Report the findings in plain words, biggest first, and say whether a quick tune looks worth it. The rules come from flags.md; a tune measures what they're really worth.
 
 ## Choose a mode and give a time estimate first
 Before any benchmark, run step 1 (inventory, ~2 minutes), then tell the user **which mode, what it will do, how long it should take, and that the GPU (and any live model server) will be busy the whole time**. Wait for a yes. If the user already named a mode, still state the estimate before starting.
@@ -45,6 +52,7 @@ Say it plainly, e.g. *"Quick tune of 3 models: about 1 hour 15 minutes, GPU busy
 Steps 1, 2, 7 and 8 apply to both modes. Quick mode does the reduced versions of steps 3–6 described in the table; comprehensive mode does them all.
 
 ### 1. Inventory
+- Confirm you aren't running on one of the models being tuned (Safety rules). If you are, stop here.
 - Run `scripts/detect_hw.sh [model dirs]`. Note the GPU, VRAM, physical cores, RAM (size, speed, module count), the PCIe link, available llama.cpp builds and their devices, GGUF files (flagged if too big for VRAM + RAM), and Ollama models.
 - Tell the user about anything that caps performance before tuning starts: one RAM module or RAM below its rated speed, a narrow PCIe link, a power-saver profile, VRAM already used by other apps. These can matter more than any flag.
 - Ask the user, if not already clear:
@@ -52,7 +60,7 @@ Steps 1, 2, 7 and 8 apply to both modes. Quick mode does the reduced versions of
   - which models matter
   - the context size their agent needs
   - whether a live llama-server/router or Ollama is running
-- Copy `config.example.json` to a working folder as `config.json`. Fill in the models (alias, path, mmproj/draft, ctx), the backends (binary paths and env), `router_url` if they run a llama-server router, and `agent.python_bin_dir` (a venv with `pytest` for the agentic checks). Set `TUNE_CONFIG` to point at it. Results go to `results_dir`.
+- Create the config with `scripts/init_config.py --out <working folder>/config.json [model dirs]`. It finds the llama.cpp builds, their GPU backends (with the AMD override where needed) and the GGUF models with their mmproj/draft files. Then fix what it can't know: each model's `ctx` (the agent's real need), `router_url` if they run a llama-server router, `agent.self_model` (see Safety rules) and `agent.python_bin_dir` (a venv with `pytest` for the agentic checks). Set `TUNE_CONFIG` to point at it. Results go to `results_dir`. (`config.example.json` documents every field.)
 
 ### 2. Agent profile
 Work out the agent's context range: base prompt, compaction trigger, what's kept (see methodology.md; for OpenCode with 64K, ~12K → ~49.5K). Pick 3–4 depths inside that range. **All later measurements use these depths, not depth 0 alone.**
@@ -89,6 +97,7 @@ Then `scripts/table.py <label-prefix>` to compare, and confirm the top 2–3 con
 - Write the router presets (flags.md has a template: per-model `device =`, no `:` in names). Show the service or startup command, and the agent config entries (context limits must match `c`).
 - Prepare the files, show the diff, and let the user install anything that needs sudo.
 - Restart, then verify every model answers through the user's real endpoint at the expected speed, at a long prompt, with mmproj loaded for vision models (send a real image).
+- **Ollama users:** run `scripts/to_ollama.py --preset <presets.ini> --model <name>` (or `--args "..."`) on the winning config. Show the Modelfile and environment, and say plainly what didn't carry over (it lists it: expert-only MoE offload, per-model backend, separate `-ub`, speculative decoding). Apply with approval (`ollama create`, the service environment needs sudo on Linux), then measure with `eval_count / eval_duration` (backends.md) and compare with the llama-server numbers. If Ollama is much slower, say so and offer `llama-server` instead.
 
 ### 8. Document
 Write a results file for the user, modelled on `references/example-rx6600xt.md`:
@@ -97,6 +106,8 @@ Write a results file for the user, modelled on `references/example-rx6600xt.md`:
 - each experiment, with what was tested, a table and the verdict
 - the final config, before vs after
 - what changed where, and how to undo it
+
+Then offer, once, to share the result with other users: fill in the fields of the repo's "Share your results" issue form (`.github/ISSUE_TEMPLATE/share-results.yml`: GPU/VRAM, CPU/RAM/OS, llama.cpp version and backend, model and quant, agent and context, flags before/after, pp/tg at depth, tasks passed) and give the user the text and the link `https://github.com/cliffkoome/llamacpp-speedtune/issues/new?template=share-results.yml`. Never post it yourself without a clear yes, and leave out anything personal (usernames, paths under home, hostnames, keys).
 
 ## Decision rules of thumb (confirm by measuring)
 - Agents re-read long prompts every turn, so **prompt speed at depth matters as much as generation speed**.

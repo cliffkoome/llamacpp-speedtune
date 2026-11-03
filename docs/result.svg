@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="252" viewBox="0 0 720 252" font-family="-apple-system, Segoe UI, Helvetica, Arial, sans-serif" font-size="14" role="img" aria-labelledby="title desc">
+<title id="title">Before and after tuning</title>
+<desc id="desc">Qwen3.6-35B-A3B on a Radeon RX 6600 XT (8 GB) at 49K tokens of context. Prompt reading: 172 tokens/s before, 526 after. Generation: 19.2 tokens/s before, 25.3 after.</desc>
+<style>
+  .bg { fill: #fcfcfb; } .t1 { fill: #0b0b0b; } .t2 { fill: #52514e; } .t3 { fill: #6e6d68; }
+  .s1 { fill: #2a78d6; } .s2 { fill: #eb6834; } .axis { stroke: #c9c8c2; stroke-width: 1; }
+  @media (prefers-color-scheme: dark) {
+    .bg { fill: #1a1a19; } .t1 { fill: #f0efec; } .t2 { fill: #c3c2b7; } .t3 { fill: #a3a29a; }
+    .s1 { fill: #3987e5; } .s2 { fill: #d95926; } .axis { stroke: #4a4a46; }
+  }
+</style>
+<rect class="bg" width="720" height="252" rx="8"/>
+<text class="t1" x="24" y="36" font-size="17" font-weight="600">Qwen3.6-35B-A3B on an 8 GB RX 6600 XT, at 49K tokens of context</text>
+<text class="t2" x="24" y="60">OpenCode at 64K. Before: Vulkan, -ub 512, q8_0 cache. After: llamacpp-speedtune's pick (HIP, -ub 2048, f16).</text>
+<text class="t2" x="24" y="96" font-weight="600">Prompt reading</text>
+<line class="axis" x1="88" y1="108" x2="88" y2="190"/>
+<text class="t3" x="24" y="131">Before</text>
+<path class="s2" d="M88,116 h62 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-62 z"/>
+<text class="t2" x="162" y="132">172 t/s</text>
+<text class="t3" x="24" y="167">After</text>
+<path class="s1" d="M88,152 h198 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-198 z"/>
+<text class="t1" x="298" y="168" font-weight="600">526 t/s</text>
+<text class="t1" x="24" y="212" font-weight="600">3.1× faster</text><text class="t3" x="24" y="232">a 49K compaction: ~4.8 → ~1.6 min</text>
+<text class="t2" x="384" y="96" font-weight="600">Generation</text>
+<line class="axis" x1="448" y1="108" x2="448" y2="190"/>
+<text class="t3" x="384" y="131">Before</text>
+<path class="s2" d="M448,116 h143 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-143 z"/>
+<text class="t2" x="603" y="132">19.2 t/s</text>
+<text class="t3" x="384" y="167">After</text>
+<path class="s1" d="M448,152 h190 a4,4 0 0 1 4,4 v14 a4,4 0 0 1 -4,4 h-190 z"/>
+<text class="t1" x="650" y="168" font-weight="600">25.3 t/s</text>
+<text class="t1" x="384" y="212" font-weight="600">+32% faster</text><text class="t3" x="384" y="232">agent tasks passed: 5/6 → 6/6</text>
+</svg>
