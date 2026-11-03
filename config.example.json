@@ -1,5 +1,5 @@
 {
-  "_comment": "Easiest: run scripts/init_config.py. Or copy to config.json and edit. Paths may use ~. Backend names are free-form; use them on the command line. agent.self_model: the model the agent running this skill uses, if it is served by router_url (the tuning then refuses to unload it).",
+  "_comment": "Easiest: run scripts/init_config.py. Or copy to config.json and edit. Paths may use ~. Backend names are free-form; use them on the command line. agent.self_model: the model the agent running this skill uses, if it is served by router_url (the tuning then refuses to unload it). engines: challenger engines (references/engines.md); a model can name its file per engine under models.<m>.engines. profiles_dir: where profiles.py keeps each model's best config.",
   "port": 8090,
   "results_dir": "results",
   "api_key_env": "LLAMA_API_KEY",
@@ -13,7 +13,9 @@
     "hip": {
       "server": "~/src/llama.cpp/build-hip/bin/llama-server",
       "bench": "~/src/llama.cpp/build-hip/bin/llama-bench",
-      "env": { "HSA_OVERRIDE_GFX_VERSION": "10.3.0" }
+      "env": {
+        "HSA_OVERRIDE_GFX_VERSION": "10.3.0"
+      }
     },
     "cuda": {
       "server": "~/src/llama.cpp/build-cuda/bin/llama-server",
@@ -40,5 +42,11 @@
     "bin": "opencode",
     "python_bin_dir": null,
     "self_model": null
+  },
+  "profiles_dir": "~/.config/llamacpp-speedtune/profiles",
+  "engines": {
+    "ik": {
+      "start": "~/src/ik_llama.cpp/build/bin/llama-server -m {model} --host 127.0.0.1 --port {port} -c {ctx} --alias {alias} {args}"
+    }
   }
 }
