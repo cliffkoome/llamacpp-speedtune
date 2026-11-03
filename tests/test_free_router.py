@@ -35,3 +35,15 @@ def test_refuses_to_unload_the_agents_own_model(calls):
 def test_no_router_configured(calls):
     assert server.free_router({"router_url": None}) == []
     assert calls == []
+
+
+def test_engine_server_command(monkeypatch):
+    monkeypatch.setitem(server.CFG, "models", {"q": {"alias": "qwen-x", "path": "/m/q.gguf", "ctx": 4096,
+                                                     "engines": {"ex": "Qwen-exl2"}}})
+    monkeypatch.setitem(server.CFG, "engines", {"ex": {"start": "/e/start.sh --port {port} --model-name {model} -c {ctx}",
+                                                       "served_name": "{model}"}})
+    s = server.make_server("q", ["--cache-mode", "Q8"], "ex", log="/tmp/x.log")
+    assert isinstance(s, server.EngineServer)
+    assert s.cmd == ["/e/start.sh", "--port", str(server.PORT), "--model-name", "Qwen-exl2", "-c", "4096",
+                     "--cache-mode", "Q8"]
+    assert s.alias == "Qwen-exl2"

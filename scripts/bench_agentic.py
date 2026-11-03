@@ -1,6 +1,6 @@
 """Run real coding-agent tasks end to end against one server config.
 
-Usage: bench_agentic.py <model> <backend> <label> <reps> [server args...]
+Usage: bench_agentic.py <model> <backend-or-engine> <label> <reps> [server args...]
   env TASKS=t1_fix_test,t3_rename   run only some tasks
   env RECORD=1                      also save rendered prompts to results/prompts/<model>/ (for bench_replay.py)
 
@@ -24,7 +24,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from server import CFG, PORT, RESULTS, ROOT, Server, vram_mib
+from server import CFG, PORT, RESULTS, ROOT, make_server, vram_mib
 
 TIMEOUT = int(os.environ.get("TASK_TIMEOUT", 1800))
 AGENTIC = ROOT / "agentic"
@@ -124,12 +124,12 @@ def main():
     ctx = m.get("ctx", 32768)
     prompts = RESULTS / "prompts" / mdl if os.environ.get("RECORD") else None
     rows = []
-    with Server(mdl, args, be, log=RESULTS / f"logs/agentic-{mdl}-{label}.log", prompts_dir=prompts) as srv:
+    with make_server(mdl, args, be, log=RESULTS / f"logs/agentic-{mdl}-{label}.log", prompts_dir=prompts) as srv:
         vram = vram_mib()
         for rep in range(int(reps)):
             for task in tasks:
                 before = srv.metrics()
-                res = run_task(task, m["alias"], ctx, RESULTS / f"runs/{mdl}/{label}/{task['id']}-{rep}")
+                res = run_task(task, srv.alias, ctx, RESULTS / f"runs/{mdl}/{label}/{task['id']}-{rep}")
                 d = {k: v - before.get(k, 0) for k, v in srv.metrics().items()}
                 pp_n, pp_s = d.get("llamacpp:prompt_tokens_total", 0), d.get("llamacpp:prompt_seconds_total", 0)
                 tg_n, tg_s = d.get("llamacpp:tokens_predicted_total", 0), d.get("llamacpp:tokens_predicted_seconds_total", 0)
