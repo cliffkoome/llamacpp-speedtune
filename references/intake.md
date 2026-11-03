@@ -65,7 +65,7 @@ Ask **once**, after the inventory, in one message, with what you detected filled
 1. The **before/after table** for each model (`before_after.py`), then the change set waiting for approval and how to undo it.
 2. One neutral invitation, never repeated:
    > If you'd like to help others with similar hardware, you can share your results, good or bad:
-   > - the GitHub results form (I can fill it in for you to check): https://github.com/cliffkoome/llamacpp-speedtune/issues/new?template=share-results.yml
+   > - the GitHub results form (I can fill it in for you to check): https://github.com/cliffkoome/local-llm-speedtune/issues/new?template=share-results.yml
    > - or a comment, in your own words, under the write-up on DEV: https://dev.to/megalodon/i-let-my-coding-agent-tune-its-own-local-llm-3x-faster-prompts-on-an-8-gb-amd-gpu-8eo
    > - and a ⭐ on the repo if it helped.
 

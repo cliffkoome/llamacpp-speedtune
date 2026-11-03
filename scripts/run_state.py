@@ -93,7 +93,7 @@ def summary(state, clock=None):
 
 
 def notify(msg):
-    title = "llamacpp-speedtune"
+    title = "local-llm-speedtune"
     try:
         if platform.system() == "Darwin" and shutil.which("osascript"):
             subprocess.run(["osascript", "-e", f'display notification {json.dumps(msg)} with title "{title}"'],

@@ -43,7 +43,7 @@
     "python_bin_dir": null,
     "self_model": null
   },
-  "profiles_dir": "~/.config/llamacpp-speedtune/profiles",
+  "profiles_dir": "~/.config/local-llm-speedtune/profiles",
   "engines": {
     "ik": {
       "start": "~/src/ik_llama.cpp/build/bin/llama-server -m {model} --host 127.0.0.1 --port {port} -c {ctx} --alias {alias} {args}"

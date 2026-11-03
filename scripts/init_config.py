@@ -131,7 +131,7 @@ def build_config(servers, models, override):
         "results_dir": "results",
         "api_key_env": "LLAMA_API_KEY",
         "router_url": None,
-        "profiles_dir": "~/.config/llamacpp-speedtune/profiles",
+        "profiles_dir": "~/.config/local-llm-speedtune/profiles",
         "backends": backends,
         "engines": {},
         "models": models,

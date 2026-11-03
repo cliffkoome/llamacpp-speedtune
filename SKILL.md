@@ -1,9 +1,9 @@
 ---
-name: llamacpp-speedtune
+name: local-llm-speedtune
 description: Make the user's local LLMs run as fast as their hardware allows, measured the way their coding agent uses them. Picks the best engine (llama.cpp by default; challengers such as ExLlama, MLX, ik_llama.cpp or OpenVINO only where the hardware suits them), then the best backend (CUDA, HIP/ROCm, Vulkan, Metal), then the best flags (batch sizes, KV cache, MoE expert offload, threads, speculative decoding), at the context depths agents really reach, confirmed in a real server and on real agent tasks. Asks all its questions up front, then runs unattended with a finish time, resumes if interrupted, and saves each model's best config as a profile behind one endpoint. Also has a 2-minute no-benchmark check (llama-server or Ollama) and Ollama export. Use when the user wants to speed up, benchmark, tune or optimise local models, pick an engine or backend, check their llama-server or Ollama settings, or set up one endpoint for several local models.
 ---
 
-# llamacpp-speedtune
+# local-llm-speedtune
 
 You're tuning the user's local models on their own hardware: **engine first, then backend, then flags**. The goal is the fastest **working** config for each model under the user's real workload, usually a coding agent. Every claim must come from a measurement on this machine. Defaults, online advice and other people's numbers are starting points only.
 

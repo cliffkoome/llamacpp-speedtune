@@ -1,4 +1,4 @@
-# llamacpp-speedtune
+# local-llm-speedtune
 
 **Make your local LLMs as fast as your hardware allows, for your coding agent.** An agent skill that has your coding agent (Claude Code, OpenCode, Codex, …) pick the best **engine**, then the best **backend**, then the best **flags** for *your* hardware, measured at the context depths agents really use and checked on real agent tasks. It asks its questions up front, tells you when it'll be done, and runs while you're away.
 
@@ -13,7 +13,7 @@ Most tuning advice is measured on an empty context with one short prompt. Coding
 No setup, no benchmarks, nothing changed. It reads your current settings and points out likely speed left on the table:
 
 ```bash
-git clone https://github.com/cliffkoome/llamacpp-speedtune && cd llamacpp-speedtune/scripts
+git clone https://github.com/cliffkoome/local-llm-speedtune && cd local-llm-speedtune/scripts
 ./quick_check.py --router http://127.0.0.1:8080          # a llama-server router (key from $LLAMA_API_KEY)
 ./quick_check.py --preset ~/models/presets.ini           # or a presets file
 ./quick_check.py --args "-m model.gguf -c 32768 -ngl 99"  # or one command line
@@ -34,8 +34,8 @@ The findings are rules of thumb. A tune measures what they're really worth on yo
 Paste this into your coding agent. It installs the skill and runs everything itself:
 
 ```text
-Install the agent skill from https://github.com/cliffkoome/llamacpp-speedtune (clone it into your skills folder, or into
-~/llamacpp-speedtune and read its SKILL.md if you don't support skills). Then use it to tune my local models.
+Install the agent skill from https://github.com/cliffkoome/local-llm-speedtune (clone it into your skills folder, or into
+~/local-llm-speedtune and read its SKILL.md if you don't support skills). Then use it to tune my local models.
 Check my hardware first, then ask me all your questions in one go and tell me when it will be done.
 After that, run it unattended to the end. Don't change my live server or agent config until I'm back and say yes.
 ```
@@ -48,7 +48,7 @@ After that, run it unattended to the end. Don't change my live server or agent c
 2. **One round of questions**, with what it found filled in: what you use the models for, which models (it lists them for you to confirm, and can suggest some that suit your hardware), context size, one user or several (with a warning in numbers if several won't fit), what matters most, how long you can be away, and **what it may do while you're away** (build backends, install engines, download up to N GB, stop your model server, keep the computer awake). Reply "all defaults" to most of them.
 3. **A plan with a finish time**, e.g. *"3 models, about 1 h 40 min, done around 21:40"*, what's busy, and what was skipped for lack of permission. Then you can leave.
 4. **The unattended run**, in phases: baseline (your current config, measured first) → engine → backend → flags → agent tasks. It resumes where it stopped if interrupted, never uses sudo, and never changes your live config while you're away.
-5. **Results:** before/after for every model, each model's best config saved as a **profile** (`~/.config/llamacpp-speedtune/profiles/`), and one endpoint for all of them (router presets, or llama-swap if models ended up on different engines). You get a notification when it's done. The new config is applied when you're back and say yes.
+5. **Results:** before/after for every model, each model's best config saved as a **profile** (`~/.config/local-llm-speedtune/profiles/`), and one endpoint for all of them (router presets, or llama-swap if models ended up on different engines). You get a notification when it's done. The new config is applied when you're back and say yes.
 
 ## Three modes
 
@@ -81,16 +81,16 @@ That's 3× faster prompt reading (a 49K compaction drops from ~4.8 to ~1.6 minut
 
 Configs from other machines: [`community/`](community/README.md). Find hardware like yours and start from its flags.
 
-**Ran a tune? [Share your results](https://github.com/cliffkoome/llamacpp-speedtune/issues/new?template=share-results.yml)**. It's a short form, and your agent can fill it in from its results file. NVIDIA, Apple and Intel results are especially welcome: those paths haven't been run end to end yet.
+**Ran a tune? [Share your results](https://github.com/cliffkoome/local-llm-speedtune/issues/new?template=share-results.yml)**. It's a short form, and your agent can fill it in from its results file. NVIDIA, Apple and Intel results are especially welcome: those paths haven't been run end to end yet.
 
 ## Install
 
 As a skill (Claude Code, OpenCode and other agents that read `SKILL.md`):
 ```bash
-npx skills add cliffkoome/llamacpp-speedtune
+npx skills add cliffkoome/local-llm-speedtune
 # or manually
-git clone https://github.com/cliffkoome/llamacpp-speedtune ~/.agents/skills/llamacpp-speedtune
-ln -s ~/.agents/skills/llamacpp-speedtune ~/.claude/skills/llamacpp-speedtune   # Claude Code
+git clone https://github.com/cliffkoome/local-llm-speedtune ~/.agents/skills/local-llm-speedtune
+ln -s ~/.agents/skills/local-llm-speedtune ~/.claude/skills/local-llm-speedtune   # Claude Code
 ```
 Then ask your agent: *"Tune my local models for OpenCode"*, or use a ready-made prompt from [`PROMPTS.md`](PROMPTS.md) (2-minute check, full tune, re-check after an update, add one model, diagnose a slow model, measure only).
 

@@ -24,7 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from run_state import default_state_path, granted, locked, notify, now, reset_stale, summary  # noqa: E402
 
-INHIBITED = "LLAMACPP_SPEEDTUNE_INHIBITED"
+INHIBITED = "LOCAL_LLM_SPEEDTUNE_INHIBITED"
 
 
 def keep_awake(argv):
@@ -33,7 +33,7 @@ def keep_awake(argv):
         return None
     env = {**os.environ, INHIBITED: "1"}
     if shutil.which("systemd-inhibit"):
-        cmd = ["systemd-inhibit", "--what=sleep:idle", "--who=llamacpp-speedtune",
+        cmd = ["systemd-inhibit", "--what=sleep:idle", "--who=local-llm-speedtune",
                "--why=benchmarking local models", sys.executable, *argv]
     elif shutil.which("caffeinate"):
         cmd = ["caffeinate", "-i", "-s", sys.executable, *argv]

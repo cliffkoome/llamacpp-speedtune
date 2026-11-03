@@ -11,7 +11,7 @@
 </style>
 <rect class="bg" width="720" height="252" rx="8"/>
 <text class="t1" x="24" y="36" font-size="17" font-weight="600">Qwen3.6-35B-A3B on an 8 GB RX 6600 XT, at 49K tokens of context</text>
-<text class="t2" x="24" y="60">OpenCode at 64K. Before: Vulkan, -ub 512, q8_0 cache. After: llamacpp-speedtune's pick (HIP, -ub 2048, f16).</text>
+<text class="t2" x="24" y="60">OpenCode at 64K. Before: Vulkan, -ub 512, q8_0 cache. After: local-llm-speedtune's pick (HIP, -ub 2048, f16).</text>
 <text class="t2" x="24" y="96" font-weight="600">Prompt reading</text>
 <line class="axis" x1="88" y1="108" x2="88" y2="190"/>
 <text class="t3" x="24" y="131">Before</text>
