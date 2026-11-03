@@ -1,126 +1,106 @@
 ---
-name: llamacpp-speedtune
-description: Make llama.cpp faster for the user's coding agent. Benchmark and tune local LLMs served with llama.cpp (llama-server) for the machine they run on, with coding agents like OpenCode as the main workload. Finds the best backend per model (CUDA, HIP/ROCm, Vulkan, Metal), batch sizes, KV cache type, MoE expert offload, threads and speculative decoding, measured at the context depths a coding agent really reaches, confirmed in a real server and on real agent tasks, then applied and documented. Also has a 2-minute no-benchmark check of current settings, and converts a tuned config to Ollama settings. Use when the user wants to speed up, benchmark, tune or optimise local models, check whether their llama-server or Ollama settings are any good, compare backends, pick llama-server flags, or set up a multi-model llama-server router.
+name: local-llm-speedtune
+description: Make the user's local LLMs run as fast as their hardware allows, measured the way their coding agent uses them. Picks the best engine (llama.cpp by default; challengers such as ExLlama, MLX, ik_llama.cpp or OpenVINO only where the hardware suits them), then the best backend (CUDA, HIP/ROCm, Vulkan, Metal), then the best flags (batch sizes, KV cache, MoE expert offload, threads, speculative decoding), at the context depths agents really reach, confirmed in a real server and on real agent tasks. Asks all its questions up front, then runs unattended with a finish time, resumes if interrupted, and saves each model's best config as a profile behind one endpoint. Also has a 2-minute no-benchmark check (llama-server or Ollama) and Ollama export. Use when the user wants to speed up, benchmark, tune or optimise local models, pick an engine or backend, check their llama-server or Ollama settings, or set up one endpoint for several local models.
 ---
 
-# llamacpp-speedtune
+# local-llm-speedtune
 
-You're tuning the user's local models on their own hardware. The goal is the fastest **working** config for each model under the user's real workload, usually a coding agent. Every claim must come from a measurement on this machine. Today's defaults and other people's numbers are starting points only.
+You're tuning the user's local models on their own hardware: **engine first, then backend, then flags**. The goal is the fastest **working** config for each model under the user's real workload, usually a coding agent. Every claim must come from a measurement on this machine. Defaults, online advice and other people's numbers are starting points only.
 
 Read before starting:
 - `references/methodology.md`: why to measure at depth, agent compaction maths, the test ladder.
 - `references/gotchas.md`: pitfalls that silently corrupt results. Read it fully before running anything.
-- Then, as needed: `references/flags.md` (what to sweep and what's settled), `references/backends.md` (build recipes), `references/example-rx6600xt.md` (a complete worked example).
+- `references/intake.md`: the questions, the plan message and the closing message, word for word.
+- Then, as needed: `references/engines.md` (challenger engines), `references/flags.md` (what to sweep), `references/backends.md` (build recipes, Ollama), `references/example-rx6600xt.md` (a complete worked example).
 
 ## Safety rules
-- **Ask before** using sudo, changing a running service, editing the user's agent or server config, installing packages or building large projects. Prepare the change, show it, and apply it once approved.
+- **Permissions are collected once, up front** (intake question 7), because the user won't be there to answer later. Within them, never stop to ask; outside them, skip the step (`run_state.py add --needs ...` records it) and list it in the report. **Never use sudo, and never change the user's live configs (server presets, agent config, services) while they're away**: prepare the change and apply it only when they're back and say yes.
+- **Never unload the model you're running on.** Find out which model *you* use. If it's served by the user's local server or GPU, a tune would stop you mid-run. Stop and tell the user: run the tune from an agent on a cloud model, or run the scripts themselves. The 2-minute check is fine either way. Record your model as `agent.self_model` in the config; `free_router()` refuses to unload it.
 - **Never kill processes by pattern** (`pkill -f`, `killall`): the pattern can match your own shell. Kill by PID.
-- **Never unload the model you're running on.** Before any benchmark, find out which model *you* (the agent running this skill) use. If it's served by the user's local server or GPU, a tune would unload it and stop you mid-run, and the GPU can't serve you and a benchmark at once. Stop and tell the user: run the tune from an agent on a cloud model, or run the scripts themselves (README, "Running scripts yourself"). The 2-minute check is fine either way: it changes nothing. Record your model as `agent.self_model` in the config; `free_router()` refuses to unload it.
-- **One test server at a time**, on a spare port (config `port`, default 8090). The user's live server stays untouched, except that you unload its models (`router_url`) so the GPU is free. Tell the user the GPU will be busy.
-- **Don't trust a run you haven't checked.** After the first agentic task, inspect the run folder: did the agent edit the right files? Did the check really fail or pass? See gotchas.
-- Keep the user posted: one line per finished experiment with the key numbers.
+- **One test server at a time**, on a spare port (config `port`, default 8090). The user's live server is left alone, except that its models are unloaded (`router_url`) or it's stopped, if they allowed it.
+- **Don't trust a run you haven't checked.** After the first agentic task, inspect the run folder: did the agent edit the right files? Did the check really fail or pass?
+- **Downloads and installs** go into their own folder or virtual environment, within the size the user allowed, from the model's official repo or a well-known quantizer.
 
-## Start with the 2-minute check
-Unless the user asked straight away for a tune, start here. It needs no config, runs no benchmarks and changes nothing, so the GPU and the user's server stay free:
-- `scripts/quick_check.py --router <url>` for a llama-server router (API key from `$LLAMA_API_KEY`, or `--key-env`), `--preset <presets.ini>`, or `--args "<llama-server command line>"`. Add `--json` to parse it.
-- For Ollama: `scripts/quick_check.py --ollama [url]` reads its models, their settings, the service environment and, for loaded models, how much sits in system RAM. Models that aren't loaded are checked on their settings only.
-- Report the findings in plain words, biggest first, and say whether a quick tune looks worth it. The rules come from flags.md; a tune measures what they're really worth.
+## The 2-minute check
+If the user only wants to know whether tuning is worth it, or before a tune, run the check. No config, no benchmarks, nothing changed:
+- `scripts/quick_check.py --router <url>` (API key from `$LLAMA_API_KEY` or `--key-env`), `--preset <presets.ini>`, `--args "<llama-server command line>"`, or `--ollama [url]`. Add `--json` to parse it.
+- Report the findings in plain words, biggest first, and say whether a tune looks worth it.
 
-## Choose a mode and give a time estimate first
-Before any benchmark, run step 1 (inventory, ~2 minutes), then tell the user **which mode, what it will do, how long it should take, and that the GPU (and any live model server) will be busy the whole time**. Wait for a yes. If the user already named a mode, still state the estimate before starting.
+## The flow
+**Inventory → one round of questions → plan with a finish time → the user walks away → unattended run in phases → results and profiles → apply when they're back → closing message.**
+
+### 1. Inventory (~2 min, read-only)
+- Confirm you aren't running on one of the models being tuned (Safety rules). If you are, stop here.
+- `scripts/detect_hw.sh [model dirs]`: GPU, VRAM, cores, RAM size/speed/channels, PCIe link, WSL2, llama.cpp builds and devices, GGUF files (and whether they fit), Ollama models, other engines already installed.
+- Read the user's live setup: `quick_check.py` on their router, presets file or Ollama.
+- `scripts/init_config.py --out <results_dir>/config.json [model dirs]` drafts the config; set `TUNE_CONFIG` to it.
+- Work out the agent's context range (methodology.md; OpenCode at 64K lives between ~12K and ~49.5K tokens) and pick 3–4 depths in it. **All measurements use these depths.**
+
+### 2. Questions (once, one message)
+Ask the questions in `references/intake.md` with what you found filled in: use, models (confirm the list; up to 3 suggestions that suit the hardware, downloaded only if picked), context, users (warn in numbers if several users won't fit well), priority, mode and time away, **permissions**, where to save, and whether they must stay on their current engine. Wait for the answers. Save them as `answers.json`, then `scripts/run_state.py init --answers answers.json`, and fix up the config (models, `ctx`, `router_url`, `agent.self_model`, `agent.python_bin_dir`, `profiles_dir`).
+
+### 3. Plan and walk away
+- **Research candidates** for this exact hardware (engines.md): current engine and backend advice, known bugs, newer forks. Write each claim down with source, date and the hardware it was measured on. These are things to try, not results.
+- Add every step to the run state with an estimate: `scripts/run_state.py add --phase <phase> --model <m> --est <min> [--needs <permission>] --desc "..." -- <command>`. Per-step costs (8 GB GPU; faster GPUs are quicker, MoE models with CPU experts the slowest):
+  - building a llama.cpp backend: 10–30 min (HIP/CUDA slowest); installing an engine: 5–20 min; downloads: size ÷ the connection's speed
+  - baseline (`validate_fill.py` or `bench_openai.py`): 3–6 min per model
+  - `micro.py` at 4 depths: 3–5 min per config (dense ≤8B), 10–15 min (large MoE)
+  - `validate_fill.py` / `bench_openai.py` to full context: 3–6 min per config
+  - `bench_agentic.py`: all 6 tasks 20–35 min per config; t1 + t4 only 3–8 min
+  - `bench_replay.py` ~15 min, `bench_general.py` 2–5 min per config
+- If the total doesn't fit the time they can be away, propose what to cut before starting.
+- Send the plan message from intake.md: per-model times, **finish clock time** (`run_state.py status`), what's busy, what could make it longer, how to stop it, what was skipped for lack of permission. Then they can leave.
 
 | | **Quick tune** (default) | **Comprehensive tune** |
 |---|---|---|
-| Goal | A big, safe win today | The best config this hardware can do, with evidence |
-| Builds | None: uses the llama.cpp builds already installed | Builds every possible backend from the same commit (asks first) |
-| Per model | Rule-of-thumb start (flags.md), one sweep of `-ub` × cache type at the max depth, MoE: lowest `--n-cpu-moe` that fits, confirmed in a real server | Steps 3–6 in full: backend comparison, all sweeps at 3–4 depths, drift checks, speculative decoding, replay |
-| Agent tasks | 2 short tasks (t1, t4) per agent model, tuned config only: catches models that can't use tools | All 6 tasks, old vs tuned config, for every agent model |
-| Before/after | Current config saved, backed up and measured in a real server first (step 2b); the report opens with the before/after table | Same, plus all 6 agent tasks on the old config |
-| Typical time | **25–45 min per model**; 50–100 min for 2–3 models | **1.5–3 h per model**; 5–10 h for 3–4 models: run it overnight |
+| Engines | llama.cpp; a challenger only if it **and** its model file are already installed | Full challenger round within the permissions (installs, downloads) |
+| Backends | The llama.cpp builds already installed | Builds every possible backend from the same commit (if allowed) |
+| Flags | One sweep of `-ub` × cache type at the max depth; MoE: lowest `--n-cpu-moe` that fits; confirmed in a real server | All sweeps at 3–4 depths, drift checks, speculative decoding, replay |
+| Agent tasks | t1 + t4 (`TASKS=t1_fix_test,t4_stacktrace`) per agent model, on the chosen config | All 6 tasks, before and after, for every agent model |
+| Before/after | Always (phase 4a) | Always, plus the old config's agent tasks |
+| Typical time | **25–45 min per model** | **1.5–3 h per model**: run it overnight |
 
-Work out the estimate from this machine's inventory with these per-step costs (measured on an 8 GB GPU; faster GPUs are quicker, MoE models with CPU experts are the slowest):
-- Building a backend: 10–30 min each (HIP/CUDA are the slowest).
-- `micro.py` at 4 depths: 3–5 min per config for a dense ≤8B model, 10–15 min for a large MoE.
-- `validate_fill.py` up to full context: 3–6 min per config.
-- `bench_agentic.py`, all 6 tasks: 20–35 min per config for a capable model (set `TASK_TIMEOUT`; a weak model can loop until it). Tasks t1 + t4 only: 3–8 min.
-- `bench_replay.py`: ~15 min per config. `bench_general.py`: 2–5 min per config.
-- Baseline (step 2b, both modes): 3–6 min per model (one `validate_fill.py` run); comprehensive mode adds the old config's agent tasks.
+### 4. The unattended run, in phases
+Run each phase as **one background command**, `scripts/run_phase.py <phase> --notify`, and wait for it to exit (don't poll: that costs the user money and keeps the session busy). When it exits, read the results, decide the next phase, add its steps, and start it. Everything is in `run-state.json`: if the session or machine restarts, `run_state.py status` shows where it stopped and `run_phase.py` resumes; finished steps are never rerun. With `prevent_sleep` allowed, run_phase.py keeps the computer awake.
 
-Say it plainly, e.g. *"Quick tune of 3 models: about 1 hour 30 minutes, GPU busy throughout. Comprehensive: about 7 hours, best run overnight."* Report progress against the estimate as you go. A quick tune can be upgraded later: comprehensive mode reuses its results.
+**4a. Baseline: what the user runs today (never skip).** Do it before changing anything; it's the report's "before".
+- `quick_check.py <source> --json > <results_dir>/baseline-settings.json` (each model's `server_args` are its current flags).
+- Back up every file that may change (presets, agent config, service files) into `<results_dir>/backup/`, noting their original paths.
+- Measure each model's current config at the agent's depths, label `before`: `validate_fill.py <model> <backend> before <depths> <server_args>`. Ollama or another engine: `bench_openai.py --url <its endpoint> --served-name <id> <model> <name> before <depths>`.
+- No settings yet → the baseline is llama-server's defaults (`-c <ctx>`); a config that doesn't load → "fails at full context". Both are findings.
 
-**Autonomy.** Once the user agrees to the mode, run the whole thing without stopping for routine choices. Still stop for the safety rules above (sudo, builds, live services, the user's configs), and at the end present the prepared config and results for approval.
+**4b. Engine.** Only for models where a challenger fits the hardware (engines.md) and the user is open to switching (or wants to know what switching would gain).
+- Check the hard requirements first (OpenAI API, tool calls, context, install without sudo); skip with the reason otherwise.
+- Use a model file of the same or higher bits per weight; give the challenger its recommended settings plus a sweep of its 1–2 key settings.
+- Measure **every** contender with `bench_openai.py` (llama.cpp too, with its best config so far), then `TASKS=t1_fix_test,t4_stacktrace bench_agentic.py <model> <engine> <label> 1 [flags]`.
+- A challenger **wins only if** it's ≥10% faster on prompt or generation at the agent's depths, not slower on the other, passes the agent tasks and fits at full context. Otherwise llama.cpp stays; report the margin either way.
 
-## Workflow
-Steps 1, 2, 2b, 7 and 8 apply to both modes. Quick mode does the reduced versions of steps 3–6 described in the table; comprehensive mode does them all.
+**4c. Backend (llama.cpp).** Build the possible backends from the same commit if allowed (backends.md); a combined build (`-DGGML_HIP=ON -DGGML_VULKAN=ON`) lets one server put different models on different backends. For each model: `micro.py <backend> C1-<model> <model> -ngl 99 [-ncmoe N] -fa 1 -p 4096 -n 128 -d <depths> -r 1`. Decide **per model**.
 
-### 1. Inventory
-- Confirm you aren't running on one of the models being tuned (Safety rules). If you are, stop here.
-- Run `scripts/detect_hw.sh [model dirs]`. Note the GPU, VRAM, physical cores, RAM (size, speed, module count), the PCIe link, available llama.cpp builds and their devices, GGUF files (flagged if too big for VRAM + RAM), and Ollama models.
-- Tell the user about anything that caps performance before tuning starts: one RAM module or RAM below its rated speed, a narrow PCIe link, a power-saver profile, VRAM already used by other apps. These can matter more than any flag.
-- Ask the user, if not already clear:
-  - their main workload (which coding agent? chat?)
-  - which models matter
-  - the context size their agent needs
-  - whether a live llama-server/router or Ollama is running
-- Create the config with `scripts/init_config.py --out <working folder>/config.json [model dirs]`. It finds the llama.cpp builds, their GPU backends (with the AMD override where needed) and the GGUF models with their mmproj/draft files. Then fix what it can't know: each model's `ctx` (the agent's real need), `router_url` if they run a llama-server router, `agent.self_model` (see Safety rules) and `agent.python_bin_dir` (a venv with `pytest` for the agentic checks). Set `TUNE_CONFIG` to point at it. Results go to `results_dir`. (`config.example.json` documents every field.)
-
-### 2. Agent profile
-Work out the agent's context range: base prompt, compaction trigger, what's kept (see methodology.md; for OpenCode with 64K, ~12K → ~49.5K). Pick 3–4 depths inside that range. **All later measurements use these depths, not depth 0 alone.**
-
-### 2b. Baseline: save and measure what the user runs today (both modes, never skip)
-The report's "before" column comes from here, measured the same way as "after". Do it before changing anything.
-- **Save the current settings:** `scripts/quick_check.py <--router url | --preset file | --ollama> --json > <results_dir>/baseline-settings.json`. Each model's `server_args` are its current llama-server flags.
-- **Back up every file you might change** (router presets, agent config such as `opencode.json`, service files) into `<results_dir>/backup/`, keeping their names. Note the original paths in the report for undo.
-- **Measure each model's current config** in a real server at the agent's depths, label `before`:
-  `scripts/validate_fill.py <model> <backend> before <depths> <server_args from baseline-settings.json>`.
-  Use the backend that matches its current device (a combined build accepts `--device`). For Ollama users, measure their Ollama model with the curl method in backends.md at the same depths and record it.
-- If a model has no settings yet (new model, nothing configured), the baseline is llama-server's defaults: `-c <ctx>` only. Say so in the report.
-- If the current config doesn't load or doesn't fit, record that: it's a finding, and "before" is "fails at full context".
-- The chosen config gets the label `after` everywhere (`validate_fill.py`, `bench_agentic.py`), so `scripts/before_after.py <model>` can build the table.
-
-### 3. Backend check
-- If more than one GPU backend is possible, build them **from the same commit** (backends.md) after asking. A combined build (e.g. `-DGGML_HIP=ON -DGGML_VULKAN=ON`) lets one router serve different models on different backends.
-- For each model: `scripts/micro.py <backend> C1-<model> <model> -ngl 99 [-ncmoe N] -fa 1 -p 4096 -n 128 -d <depths> -r 1`.
-- Decide **per model**. MoE models with CPU experts and dense models can prefer different backends.
-
-### 4. Parameter sweeps (micro.py, then confirm)
-For each model on its chosen backend, at a mid and a max depth:
-1. `-ub 512,1024,2048` (`-b 2048`). Prompt speed vs VRAM.
-2. `-ctk f16,q8_0 -ctv f16,q8_0`. Generation speed vs VRAM.
-3. MoE only: `--n-cpu-moe` from tight to loose, **together with** the best `-ub` and cache type, at the max depth.
+**4d. Flags** (on the chosen engine and backend; flags.md), at a mid and the max depth:
+1. `-ub 512,1024,2048` (`-b 2048`): prompt speed vs VRAM.
+2. `-ctk f16,q8_0 -ctv f16,q8_0`: generation speed vs VRAM.
+3. MoE only: `--n-cpu-moe` from tight to loose, **with** the best `-ub` and cache type, at the max depth.
 4. MoE / CPU-heavy: `-t` = 4, 6, physical cores, logical cores.
-5. Note any out-of-memory failures; they mark the boundary.
-6. End each sweep by rerunning its first config (drift check, methodology.md).
+5. Out-of-memory failures mark the boundary; end each sweep by rerunning its first config (drift check).
+Then `table.py <prefix>`, and confirm the top 2–3 with `validate_fill.py` at the full `-c`. Pick the fastest that fits with a few hundred MB of VRAM headroom. Measure the winner with label `after`.
 
-Then `scripts/table.py <label-prefix>` to compare, and confirm the top 2–3 configs with `scripts/validate_fill.py <model> <backend> <label> <depths> <server args>` at the full `-c`. Pick the fastest that fits with **a few hundred MB of VRAM headroom**.
+**4e. Speculative decoding** (comprehensive): MTP/assistant drafts and `ngram-mod` (flags.md), judged with `bench_agentic.py` and `bench_general.py`. Keep only if wall time drops and the pass rate holds.
 
-### 5. Speculative decoding
-- Check GGUF metadata for MTP/nextn tensors or a matching assistant/draft model (flags.md).
-- Try what's available: `draft-mtp` with an assistant model; `ngram-mod` for every model.
-- Judge with `scripts/bench_agentic.py` and `scripts/bench_general.py`, not micro-benchmarks. Keep it only if wall time drops and the pass rate holds.
+**4f. End-to-end.** Run t1 + t4 for **every** agent model early: small or older models may never make a tool call, and no flag fixes that. `bench_agentic.py <model> <name> after 1 <flags>` (comprehensive: also `before`, all 6 tasks, `RECORD=1` once for `bench_replay.py`). A config that's faster but fails more tasks is not a win.
 
-### 6. End-to-end check
-- Run at least the first two tasks for **every** model the user wants to use with their agent before spending long on tuning it: small or older models (e.g. Qwen2.5-Coder-3B) may never make a tool call, and no flag fixes that.
-- `scripts/bench_agentic.py <model> <backend> before 1 <server_args from the baseline>` (comprehensive mode) and `... after 1 <new flags>`, with `RECORD=1` once per model to capture prompts. Raise `TASK_TIMEOUT` (seconds) for slow models.
-- `scripts/bench_replay.py` to compare finalists on identical recorded traffic and see prompt-cache reuse.
-- `scripts/bench_general.py` for chat use (set `IMAGE=` for vision models).
-- Compare pass rate, wall time, pp and tg. A config that's faster but fails more tasks is not a win.
+### 5. Results and profiles (still unattended)
+- `scripts/profiles.py save <model> <backend-or-engine>` for every tuned model: engine, backend, flags, model file, measured speeds before and after, agent tasks, engine version, hardware, date. The previous profile moves to `history/`.
+- `scripts/profiles.py serve-config --out <results_dir>/serve`: router presets when everything is on one llama.cpp build, otherwise a llama-swap config. Either way the agent talks to **one address**, and switching models switches the whole config.
+- Users who stay on Ollama: `to_ollama.py` on the winner, plus the measured cost of staying (`bench_openai.py` against Ollama vs the llama.cpp winner).
+- The report (`<results_dir>/report.md`), modelled on `references/example-rx6600xt.md`, **opens with `before_after.py <model>` for each model**, then: hardware, agent profile, research claims vs what was measured, each experiment with its verdict, what was skipped and why, the prepared changes (diffs), and how to undo each one from `backup/`.
+- `run_state.py notify "Tuning finished: <one-line result>"`, or your own notification tool if you have one.
 
-### 7. Apply (with approval)
-- Write the router presets (flags.md has a template: per-model `device =`, no `:` in names). Show the service or startup command, and the agent config entries (context limits must match `c`).
-- Prepare the files, show the diff, and let the user install anything that needs sudo.
-- Restart, then verify every model answers through the user's real endpoint at the expected speed, at a long prompt, with mmproj loaded for vision models (send a real image).
-- **Ollama users:** run `scripts/to_ollama.py --preset <presets.ini> --model <name>` (or `--args "..."`) on the winning config. Show the Modelfile and environment, and say plainly what didn't carry over (it lists it: expert-only MoE offload, per-model backend, separate `-ub`, speculative decoding). Apply with approval (`ollama create`, the service environment needs sudo on Linux), then measure with `eval_count / eval_duration` (backends.md) and compare with the llama-server numbers. If Ollama is much slower, say so and offer `llama-server` instead.
+### 6. Apply (when the user is back, with their yes)
+Show the before/after and the prepared changes. On a yes: install the serving config, update the agent config (context limits must match), restart, and verify every model answers through the real endpoint at the expected speed with a long prompt (send a real image to vision models). Anything needing sudo, the user runs.
 
-### 8. Document
-Write a results file for the user, modelled on `references/example-rx6600xt.md`. **Start it with the before/after table for each model**, generated by `scripts/before_after.py <model>` from the measurements (don't retype numbers). Then:
-- the hardware
-- the agent profile
-- each experiment, with what was tested, a table and the verdict
-- the final config, before vs after
-- what changed where, and how to undo it: the backups in `<results_dir>/backup/` and the command to put each one back
-
-Then offer, once, to share the result with other users: fill in the fields of the repo's "Share your results" issue form (`.github/ISSUE_TEMPLATE/share-results.yml`: GPU/VRAM, CPU/RAM/OS, llama.cpp version and backend, model and quant, agent and context, flags before/after, pp/tg at depth, tasks passed) and give the user the text and the link `https://github.com/cliffkoome/llamacpp-speedtune/issues/new?template=share-results.yml`. Never post it yourself without a clear yes, and leave out anything personal (usernames, paths under home, hostnames, keys).
+### 7. Closing message
+Once, after the results: the neutral invitation in `references/intake.md` (GitHub results form, which you fill in for them to check; a DEV comment in their own words; a ⭐ if it helped). Never post, comment, react or star anything yourself, and don't make it depend on the results being good.
 
 ## Decision rules of thumb (confirm by measuring)
 - Agents re-read long prompts every turn, so **prompt speed at depth matters as much as generation speed**.
@@ -128,3 +108,4 @@ Then offer, once, to share the result with other users: fill in the fields of th
 - f16 cache beats q8_0 for speed when it fits; q8_0 is the floor for agents.
 - Fewer CPU-offloaded MoE layers is faster only until VRAM runs out; then everything collapses.
 - If the GPU drives the display, keep headroom for it.
+- Wrappers (Ollama, LM Studio) can't beat a tuned llama-server running the same code; only real challengers (engines.md) can.

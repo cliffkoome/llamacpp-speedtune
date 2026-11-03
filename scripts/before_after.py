@@ -7,6 +7,7 @@ Usage: before_after.py <model> [--before LABEL] [--after LABEL] [--results DIR]
 
 Reads whichever of these exist in the results folder and prints Markdown:
   validate.csv   real-server speed at each depth (the headline table)
+  openai.csv     client-timed speed at each depth, the same method for every engine (bench_openai.py)
   micro.csv      llama-bench speed at each depth (rows whose label is exactly LABEL)
   agentic.csv    agent tasks: passed, wall time, speed during the tasks
 The results folder is the config's results_dir ($TUNE_CONFIG or ./config.json), else ./results.
@@ -45,6 +46,8 @@ def change(before, after):
     if not before or after is None:
         return "–"
     pct = (after / before - 1) * 100
+    if abs(pct) < 0.5:
+        return "0%"
     if after / before >= 2:
         return f"**{after / before:.1f}×**"
     return f"**{pct:+.0f}%**" if abs(pct) >= 5 else f"{pct:+.0f}%"
@@ -123,6 +126,9 @@ def report(results, model, before, after, model_file=None):
     t = validate_table(_rows(results / "validate.csv"), model, before, after)
     if t:
         parts += ["Real server, tokens/s at the agent's context depths:", "", *t, ""]
+    t = validate_table(_rows(results / "openai.csv"), model, before, after)
+    if t:
+        parts += ["Timed from the client, the same way for every engine (bench_openai.py), tokens/s:", "", *t, ""]
     t = micro_table(_rows(results / "micro.csv"), model_file, before, after)
     if t:
         parts += ["llama-bench, tokens/s:", "", *t, ""]

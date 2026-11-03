@@ -7,6 +7,7 @@ models so the GPU is free.
 """
 import json
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -167,3 +168,71 @@ class Server:
                 k, v = line.rsplit(" ", 1)
                 out[k] = float(v)
         return out
+
+
+def engines():
+    """Challenger engines from the config (references/engines.md): name -> entry."""
+    return CFG.get("engines") or {}
+
+
+class EngineServer:
+    """A test server for any engine with an OpenAI-compatible API (ExLlama/TabbyAPI, MLX, vLLM, ...).
+
+    Config entry (engines.<name>):
+      start:      command template; placeholders {model} {port} {ctx} {alias} {args}
+                  ({args} missing: extra args are appended)
+      env:        extra environment
+      ready_path: path that answers 200 once the model is loaded (default /v1/models)
+      served_name: model id the engine serves under (default {alias})
+    The model file for this engine comes from models.<model>.engines.<name>, else models.<model>.path.
+    Same interface as Server, except metrics() is empty: speeds come from bench_openai.py.
+    """
+
+    def __init__(self, model_name, args, engine_name, log, prompts_dir=None):
+        m = model(model_name)
+        e = engines().get(engine_name)
+        if not e:
+            raise SystemExit(f"engine {engine_name!r} is not in the config (have: {', '.join(engines()) or 'none'})")
+        path = str(Path((m.get("engines") or {}).get(engine_name, m["path"])).expanduser())
+        fields = {"model": path, "port": PORT, "ctx": m.get("ctx", 32768), "alias": m["alias"],
+                  "args": shlex.join(args)}
+        cmd = os.path.expanduser(e["start"]).format(**fields)
+        self.cmd = shlex.split(cmd) + ([] if "{args}" in e["start"] else list(args))
+        self.alias = e.get("served_name", "{alias}").format(**fields)
+        self.ready_path = e.get("ready_path", "/v1/models")
+        self.env = {**os.environ, **{k: os.path.expanduser(str(v)) for k, v in (e.get("env") or {}).items()}}
+        self.log = Path(log)
+        self.proc = None
+
+    def __enter__(self):
+        try:
+            request("/v1/models", timeout=2)
+            raise RuntimeError(f"port {PORT} is already in use; stop that server first")
+        except OSError:
+            pass
+        free_router()
+        self.log.parent.mkdir(parents=True, exist_ok=True)
+        self.proc = subprocess.Popen(self.cmd, env=self.env, stdout=open(self.log, "w"), stderr=subprocess.STDOUT,
+                                     start_new_session=True)
+        for _ in range(1800):  # some engines compile kernels on first start
+            if self.proc.poll() is not None:
+                raise RuntimeError(f"engine exited (out of memory, wrong model format or bad flag?), see {self.log}")
+            try:
+                request(self.ready_path, timeout=2)
+                return self
+            except OSError:
+                pass
+            time.sleep(1)
+        raise RuntimeError("engine did not become ready in 30 minutes")
+
+    __exit__ = Server.__exit__
+
+    def metrics(self):
+        return {}
+
+
+def make_server(model_name, args, name, log, prompts_dir=None):
+    """Server for a llama.cpp backend, or EngineServer for a challenger engine from the config."""
+    if name in engines():
+        return EngineServer(model_name, args, name, log, prompts_dir)
+    return Server(model_name, args, name, log, prompts_dir)

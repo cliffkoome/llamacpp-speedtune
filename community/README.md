@@ -2,7 +2,7 @@
 
 Tuned configs from real machines. Find hardware like yours and start from its flags, then confirm on your machine with a quick tune: drivers, RAM speed and the PCIe link change the numbers.
 
-**Add yours:** [open a "Share your results" issue](https://github.com/cliffkoome/llamacpp-speedtune/issues/new?template=share-results.yml). If an agent ran the tune, ask it to fill the form in from your results file. Rows are added from those issues.
+**Add yours:** [open a "Share your results" issue](https://github.com/cliffkoome/local-llm-speedtune/issues/new?template=share-results.yml). If an agent ran the tune, ask it to fill the form in from your results file. Rows are added from those issues.
 
 Speeds are tokens/s, before → after, measured at the depth shown.
 
