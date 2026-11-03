@@ -54,3 +54,40 @@ def test_backends_machine_wide():
     assert qc.check_backends(["ROCm0", "Vulkan0"], ["", ""])
     assert not qc.check_backends(["ROCm0", "Vulkan0"], ["ROCm0", "Vulkan0"])
     assert not qc.check_backends(["Vulkan0"], [""])
+
+
+def test_to_cli_round_trips_and_drops_launcher_flags():
+    cfg = qc.parse_cmdline("llama-server --host 127.0.0.1 --port 0 --alias q --model /m.gguf --jinja -fa on "
+                           "-ngl 99 --n-cpu-moe 34 -ub 2048 --no-mmproj-offload --log-colors off")
+    args = qc.to_cli(cfg)
+    assert args == "--jinja --flash-attn on --gpu-layers 99 --n-cpu-moe 34 --ubatch-size 2048 --no-mmproj-offload"
+    assert qc.parse_cmdline(args) == {k: v for k, v in cfg.items() if k not in ("host", "port", "alias", "model", "log-colors")}
+
+
+def test_to_cli_from_preset_booleans(tmp_path):
+    p = tmp_path / "presets.ini"
+    p.write_text("[*]\njinja = true\n[m]\nmodel = /m.gguf\nno-mmproj-offload = true\nctx-size = 8192\n")
+    assert qc.to_cli(qc.parse_preset(p)["m"]) == "--jinja --no-mmproj-offload --ctx-size 8192"
+
+
+def _ollama_model(moe=False, size=4400, params=None, loaded=None):
+    return {"name": "m", "params": params or {}, "loaded": loaded,
+            "meta": {"arch": "x", "block_count": 28, "expert_count": 8 if moe else 0, "expert_used": 2,
+                     "context_length": 32768, "size_mib": size, "moe": moe}}
+
+
+def test_ollama_defaults_flagged():
+    t = titles(qc.check_ollama(_ollama_model(), {}, HW))
+    assert "Context size left at Ollama's default" in t and "Flash attention not switched on" in t
+
+
+def test_ollama_tuned_is_clean():
+    env = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0"}
+    loaded = {"size": 5000 * 2**20, "size_vram": 5000 * 2**20, "context_length": 32768}
+    assert qc.check_ollama(_ollama_model(params={"num_ctx": "32768"}, loaded=loaded), env, HW) == []
+
+
+def test_ollama_moe_split_and_small_context():
+    loaded = {"size": 21000 * 2**20, "size_vram": 6000 * 2**20, "context_length": 4096}
+    t = titles(qc.check_ollama(_ollama_model(moe=True, size=21000, loaded=loaded), {"OLLAMA_NUM_PARALLEL": "4"}, HW))
+    assert "MoE model split by whole layers" in t and "Context of 4096 tokens" in t and "OLLAMA_NUM_PARALLEL=4" in t
