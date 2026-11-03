@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy to config.json and edit. Paths may use ~. Backend names are free-form; use them on the command line.",
+  "_comment": "Easiest: run scripts/init_config.py. Or copy to config.json and edit. Paths may use ~. Backend names are free-form; use them on the command line. agent.self_model: the model the agent running this skill uses, if it is served by router_url (the tuning then refuses to unload it).",
   "port": 8090,
   "results_dir": "results",
   "api_key_env": "LLAMA_API_KEY",
@@ -38,6 +38,7 @@
   "agent": {
     "type": "opencode",
     "bin": "opencode",
-    "python_bin_dir": null
+    "python_bin_dir": null,
+    "self_model": null
   }
 }

@@ -1,0 +1,74 @@
+name: Share your results
+description: Add your hardware and tuned config to the community results table.
+title: "[results] <GPU> / <model>"
+labels: ["results"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for sharing! Every row helps someone with the same hardware skip straight to a good config.
+        If an agent ran the tune for you, it can fill this in from your results file. Please check the numbers first.
+  - type: input
+    id: gpu
+    attributes:
+      label: GPU and VRAM
+      placeholder: Radeon RX 6600 XT, 8 GB
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: CPU, RAM and OS
+      placeholder: Ryzen 7 5700X (8 cores), 32 GB DDR4-3200 dual channel, Linux 6.12
+    validations:
+      required: true
+  - type: input
+    id: llamacpp
+    attributes:
+      label: llama.cpp version and backend
+      description: From `llama-server --version`. Backend = CUDA, HIP/ROCm, Vulkan, Metal, SYCL or CPU.
+      placeholder: b11935, HIP (ROCm 7.2)
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model and quant
+      placeholder: Qwen3.6-35B-A3B UD-Q4_K_M
+    validations:
+      required: true
+  - type: input
+    id: agent
+    attributes:
+      label: Agent and context size
+      placeholder: OpenCode, 64K
+    validations:
+      required: true
+  - type: textarea
+    id: flags
+    attributes:
+      label: Flags before and after
+      placeholder: |
+        Before: Vulkan, -ngl 99 --n-cpu-moe 33 -ub 512 -ctk q8_0 -ctv q8_0
+        After:  HIP, -ngl 99 --n-cpu-moe 34 -ub 2048 -b 2048 -ctk f16 -ctv f16 -t 8
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: speed
+    attributes:
+      label: Speed before and after
+      description: Prompt (pp) and generation (tg) in tokens/s, and the context depth they were measured at.
+      placeholder: "At 49K: pp 172 -> 526 t/s, tg 19.2 -> 25.3 t/s"
+    validations:
+      required: true
+  - type: input
+    id: tasks
+    attributes:
+      label: Agent tasks passed (if you ran them)
+      placeholder: 5/6 -> 6/6
+  - type: textarea
+    id: notes
+    attributes:
+      label: Anything surprising?
+      description: Backends that didn't fit, flags that hurt, hardware limits you found.

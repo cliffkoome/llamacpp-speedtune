@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Shell scripts
+        run: shellcheck scripts/*.sh
+      - name: Python compiles
+        run: python -m py_compile scripts/*.py agentic/checks/*.py agentic/make_legacy.py
+      - name: JSON files are valid
+        run: |
+          python -m json.tool config.example.json > /dev/null
+          python -m json.tool agentic/tasks.json > /dev/null
+      - name: Unit tests
+        # Only tests/: the agentic template's own tests fail on purpose (the agent's job is to fix them).
+        run: |
+          pip install pytest
+          pytest -q tests

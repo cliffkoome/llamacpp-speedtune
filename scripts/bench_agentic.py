@@ -37,7 +37,7 @@ def opencode_config(alias, ctx, tmp):
     path.write_text(json.dumps({
         "$schema": "https://opencode.ai/config.json",
         "providers": {"bench": {
-            "name": "tune-my-llm test server",
+            "name": "llamacpp-speedtune test server",
             "package": "@opencode/ai/providers/openai-compatible",
             "settings": {"baseURL": f"http://127.0.0.1:{PORT}/v1",
                          "apiKey": f"{{env:{key_env}}}" if key_env else "none"},
@@ -86,7 +86,7 @@ def run_task(task, alias, ctx, keep_dir):
     run, summarize = ADAPTERS[CFG.get("agent", {}).get("type", "opencode")]
     # Agents search outside their folder when asked to change things "everywhere", so the
     # project lives alone in a fresh temp dir, away from the template and earlier runs.
-    tmp = Path(tempfile.mkdtemp(prefix="tune-my-llm-"))
+    tmp = Path(tempfile.mkdtemp(prefix="llamacpp-speedtune-"))
     workdir = tmp / "shop-project"
     shutil.copytree(AGENTIC / "template", workdir, ignore=shutil.ignore_patterns(".git", "__pycache__"))
     subprocess.run(["chmod", "-R", "u+w", workdir], check=True)
